@@ -7,6 +7,8 @@ It checks:
 - Heimdall block height vs an external API
 - Bor block heigh vs an external API
 - Your signature is in the latest Heimdall Blocks
+
+In the future, it should also check:
 - Your signature is in the latest Bor Blocks
 
 If any condition fails, it will send you a page via Pager Duty's API. 
