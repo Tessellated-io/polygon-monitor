@@ -1,0 +1,15 @@
+[Unit]
+Description=Polygon Monitor
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+User=<USER>
+TimeoutStopSec=90s
+WorkingDirectory=<PATH>/polygon-monitor
+ExecStart=/bin/bash <PATH>/polygon-monitor/start.sh
+
+[Install]
+WantedBy=multi-user.target
