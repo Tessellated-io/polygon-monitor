@@ -38,7 +38,7 @@ const REMOTE_HEIMDALL_LAG_ALERT_AMOUNT = 100
 const LOCAL_BOR_API = "http://127.0.0.1:8545"
 
 // The remote bor API
-const REMOTE_BOR_API = "https://rpc-mainnet.matic.network"
+const REMOTE_BOR_API = "https://rpc-mainnet.maticvigil.com"
 
 // How many heimdall blocks our node can be behind before we page.
 const LOCAL_BOR_LAG_ALERT_AMOUNT = 5
