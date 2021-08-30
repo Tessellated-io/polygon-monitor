@@ -25,33 +25,8 @@ const ETH_KEY_MIN_BALANCE = new BigNumber("300000000000000000") // .3 ETH
 // The local heimdall API.
 const LOCAL_HEIMDALL_API = "http://127.0.0.1:26657"
 
-// The remote heimdall API
-const REMOTE_HEIMDALL_API = "https://heimdall.api.matic.network/checkpoints/count"
-
-// How many heimdall blocks our node can be behind before we page.
-const LOCAL_HEIMDALL_LAG_ALERT_AMOUNT = 5
-
-// How many heimdall blocks the remote node can be behind before we page.
-const REMOTE_HEIMDALL_LAG_ALERT_AMOUNT = 100
-
 // The local bor API
 const LOCAL_BOR_API = "http://127.0.0.1:8545"
-
-// The remote bor API
-const REMOTE_BOR_API = "https://rpc-mainnet.maticvigil.com"
-
-// How many heimdall blocks our node can be behind before we page.
-const LOCAL_BOR_LAG_ALERT_AMOUNT = 5
-
-// How many heimdall blocks the remote node can be behind before we page.
-const REMOTE_BOR_LAG_ALERT_AMOUNT = 100
-
-// The validator ID to monitor for signatures on Heimdall
-// See: .heimdalld/config/priv_validator_key.json 
-const HEIMDALL_VALIDATOR_ADDRESS = "13DC53FA54E7D662FF305B6C3EF95090C31DC576"
-
-// The number of consecutive heimdall blocks that cannot be signed.
-const ACCEPTABLE_CONSECUTIVE_HEIMDALL_MISSES = 3
 
 // How often to run a health check.
 const CHECK_INTERVAL_SECONDS = 30 // 30 seconds
@@ -89,19 +64,19 @@ const monitor = async () => {
       const heimdallDataUrl = `${LOCAL_HEIMDALL_API}/block`
       const heimdallDataResult = await WebRequest.get(heimdallDataUrl)
       if (heimdallDataResult.statusCode !== 200) {
-        throw new Error(`Local API is down! Error code ${heimdallDataResult.statusCode}: ${heimdallDataResult.content}`)
+        throw new Error(`Local Heimdalld API is down! Error code ${heimdallDataResult.statusCode}: ${heimdallDataResult.content}`)
       }
       const apiData = JSON.parse(heimdallDataResult.content)
-      const blockTime = Date.parse(apiData.result.block.header.time) / 1000
+      const heimdallBlockTime = Date.parse(apiData.result.block.header.time) / 1000
       const currentTime = Date.now() / 1000
-      const deltaTime = Math.abs(currentTime - blockTime)
-      if (deltaTime > ACCEPTABLE_DELTA_SECS) {
-        await page("Node is lagging", `System Time: ${currentTime}, Block Time: ${blockTime}. Is Hiemdalld  stalled?`, 5 * 60, "node-lag")
+      const heimdallDeltaTime = Math.abs(currentTime - heimdallBlockTime)
+      if (heimdallDeltaTime > ACCEPTABLE_DELTA_SECS) {
+        await page("Heimdall node is lagging", `System Time: ${currentTime}, Block Time: ${heimdallBlockTime}. Is Hiemdalld  stalled?`, 5 * 60, "node-lag")
       }
       console.log("")
 
       // Verify Bor Recency
-      const localBorHeightResult = await WebRequest.post(
+      const borDataResult = await WebRequest.post(
         LOCAL_BOR_API,
         {
           headers: {
@@ -117,70 +92,16 @@ const monitor = async () => {
           }
         )
       )
-      const localBorHeight = new BigNumber(JSON.parse(localBorHeightResult.content).result)
-
-      const remoteBorHeightResult = await WebRequest.post(
-        REMOTE_BOR_API,
-        {
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-        JSON.stringify(
-          {
-            jsonrpc: "2.0",
-            method: "eth_blockNumber",
-            params: [],
-            id: 1
-          }
-        )
-      )
-      const remoteBorHeight = new BigNumber(JSON.parse(remoteBorHeightResult.content).result)
-
-      console.log("Bor Block Heights:")
-      console.log(`Local: ${localBorHeight.toFixed()}, Remote: ${remoteBorHeight.toFixed()}`)
-
-      if (remoteBorHeight.minus(localBorHeight).isGreaterThan(LOCAL_BOR_LAG_ALERT_AMOUNT)) {
-        console.log('Local bor node lag too high. Paging')
-        page("Local bor node is lagging", `Lag: ${remoteBorHeight.minus(localBorHeight).toFixed()}`, THROTTLE_INTERVAL_SECONDS, `local_bor_lag`)
+      if (borDataResult.statusCode !== 200) {
+        throw new Error(`Local Bor API is down! Error code ${borDataResult.statusCode}: ${borDataResult.content}`)
       }
-
-      if (localBorHeight.minus(remoteBorHeight).isGreaterThan(REMOTE_BOR_LAG_ALERT_AMOUNT)) {
-        console.log('Remote bor node lag too high. Paging')
-        page("Remote bor node is lagging", `Lag: ${localBorHeight.minus(remoteBorHeight).toFixed()}`, THROTTLE_INTERVAL_SECONDS, `remote_bor_lag`)
+      const borData = JSON.parse(borDataResult.content)
+      const borBlockTime = Date.parse(`${parseInt(borData.result.timestamp, 16)}`)
+      const borDeltaDtime = Math.abs(currentTime - borBlockTime)
+      if (borDeltaDtime > ACCEPTABLE_DELTA_SECS) {
+        await page("Bor node is lagging", `System Time: ${currentTime}, Block Time: ${borDeltaDtime}. Is Bor  stalled?`, 5 * 60, "node-lag")
       }
       console.log("")
-
-      // Verify signature appears in Heimdall block. 
-      let foundHeimdall = false
-      const precommits: Array<any> = JSON.parse(heimdallDataResult.content).result.block.last_commit.precommits
-      for (let i = 0; i < precommits.length; i++) {
-        const precommit = precommits[i]
-
-        // Skip precommits that are missing.
-        if (precommit == null) {
-          continue
-        }
-
-        if (precommit.validator_address === HEIMDALL_VALIDATOR_ADDRESS) {
-          foundHeimdall = true
-        }
-      }
-      if (foundHeimdall = true) {
-        console.log("Found Heimdall precommit.")
-        consecutiveHeimdallMisses = 0
-      } else {
-        consecutiveHeimdallMisses++
-        console.log("Missed Heimdall precommit in block " + localHeimdallHeight + ". Consecutive Heimdall misses is now: " + consecutiveHeimdallMisses)
-      }
-
-      if (consecutiveHeimdallMisses > ACCEPTABLE_CONSECUTIVE_HEIMDALL_MISSES) {
-        page("Missed Heimdall Precommits", "Consecutive misses: " + consecutiveHeimdallMisses, THROTTLE_INTERVAL_SECONDS, "missed_heimdall_precommit")
-      }
-      console.log("")
-
-      // Verify signatures appear in the Bor block.
-      // TODO(keefertaylor): Implement.
 
       // Verify sufficient ETH is on the signer key.
       const balanceResult = await WebRequest.post(
