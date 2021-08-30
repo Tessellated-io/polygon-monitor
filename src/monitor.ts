@@ -62,7 +62,10 @@ const THROTTLE_INTERVAL_SECONDS = 5 * 60 // 5 minutes
 // The number of times the process can error before it pages you. 
 // This servers to stop users from accidentally getting paged if the local or remote
 // APIs experience a temporary outage.
-const ACCEPTABLE_CONSECUTIVE_FLAKES = 3
+const ACCEPTABLE_CONSECUTIVE_FLAKES = 15
+
+// Amount of seconds allowed to be out of date before paging
+const ACCEPTABLE_DELTA_SECS = 60
 
 /** End Config */
 
@@ -82,29 +85,22 @@ const monitor = async () => {
     console.log("")
 
     try {
-      // Verify Heimdall block heights
+      // Verify Heimdall recency
       const heimdallDataUrl = `${LOCAL_HEIMDALL_API}/block`
       const heimdallDataResult = await WebRequest.get(heimdallDataUrl)
-      const localHeimdallHeight = new BigNumber(JSON.parse(heimdallDataResult.content).result.block.header.height)
-
-      const remoteHeimdallHeightResult = await WebRequest.get(REMOTE_HEIMDALL_API)
-      const remoteHeimdallHeight = new BigNumber(JSON.parse(remoteHeimdallHeightResult.content).height)
-
-      console.log("Heimdall Block Heights:")
-      console.log(`Local: ${localHeimdallHeight.toFixed()}, Remote: ${remoteHeimdallHeight.toFixed()}`)
-
-      if (remoteHeimdallHeight.minus(localHeimdallHeight).isGreaterThan(LOCAL_HEIMDALL_LAG_ALERT_AMOUNT)) {
-        console.log('Local heimdall node lag too high. Paging')
-        page("Local heimdall node is lagging", `Lag: ${remoteHeimdallHeight.minus(localHeimdallHeight).toFixed()}`, THROTTLE_INTERVAL_SECONDS, `local_heimdall_lag`)
+      if (heimdallDataResult.statusCode !== 200) {
+        throw new Error(`Local API is down! Error code ${heimdallDataResult.statusCode}: ${heimdallDataResult.content}`)
       }
-
-      if (localHeimdallHeight.minus(remoteHeimdallHeight).isGreaterThan(REMOTE_HEIMDALL_LAG_ALERT_AMOUNT)) {
-        console.log('Remote heimdall node lag too high. Paging')
-        page("Remote heimdall node is lagging", `Lag: ${localHeimdallHeight.minus(remoteHeimdallHeight).toFixed()}`, THROTTLE_INTERVAL_SECONDS, `remote_heimdall_lag`)
+      const apiData = JSON.parse(heimdallDataResult.content)
+      const blockTime = Date.parse(apiData.result.block.header.time) / 1000
+      const currentTime = Date.now() / 1000
+      const deltaTime = Math.abs(currentTime - blockTime)
+      if (deltaTime > ACCEPTABLE_DELTA_SECS) {
+        await page("Node is lagging", `System Time: ${currentTime}, Block Time: ${blockTime}. Is Hiemdalld  stalled?`, 5 * 60, "node-lag")
       }
       console.log("")
 
-      // Get Bor Block Heights 
+      // Verify Bor Recency
       const localBorHeightResult = await WebRequest.post(
         LOCAL_BOR_API,
         {
@@ -114,10 +110,10 @@ const monitor = async () => {
         },
         JSON.stringify(
           {
-            jsonrpc: "2.0",
-            method: "eth_blockNumber",
-            params: [],
-            id: 1
+            "jsonrpc":"2.0",
+            "method":"eth_getBlockByNumber",
+            "params":["latest", false],
+            "id":1
           }
         )
       )
