@@ -72,6 +72,8 @@ const monitor = async () => {
       const heimdallDeltaTime = Math.abs(currentTime - heimdallBlockTime)
       if (heimdallDeltaTime > ACCEPTABLE_DELTA_SECS) {
         await page("Heimdall node is lagging", `System Time: ${currentTime}, Block Time: ${heimdallBlockTime}. Is Hiemdalld  stalled?`, 5 * 60, "node-lag")
+      } else {
+        console.log("Heimdall is up to date")
       }
       console.log("")
 
@@ -100,7 +102,10 @@ const monitor = async () => {
       const borDeltaDtime = Math.abs(currentTime - borBlockTime)
       if (borDeltaDtime > ACCEPTABLE_DELTA_SECS) {
         await page("Bor node is lagging", `System Time: ${currentTime}, Block Time: ${borDeltaDtime}. Is Bor  stalled?`, 5 * 60, "node-lag")
-      }
+      } else {
+      console.log("Bor is up to date")
+    }
+
       console.log("")
 
       // Verify sufficient ETH is on the signer key.
